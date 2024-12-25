@@ -8,7 +8,7 @@ const log = (message) => {
 };
 
 // Main handler function for the Froggy Proxy
-module.exports = (req, res) => {
+module.exports = async (req, res) => {
     const queryParams = new URLSearchParams(req.url.split('?')[1]);
     const targetUrl = queryParams.get('url');
     const corsEnabled = queryParams.get('cors') === 'true';
@@ -17,8 +17,7 @@ module.exports = (req, res) => {
     // Validate the target URL
     if (!targetUrl) {
         log('Error: Missing target URL');
-        res.status(400).json({ error: 'Target URL is required.' });
-        return;
+        return res.status(400).json({ error: 'Target URL is required.' });
     }
 
     // Configure proxy options
@@ -47,5 +46,5 @@ module.exports = (req, res) => {
 
     // Create and execute the proxy middleware
     const proxy = createProxyMiddleware(proxyOptions);
-    proxy(req, res, () => {});
+    return proxy(req, res, () => {}); // Vercel serverless functions expect a return value
 };
