@@ -1,0 +1,8 @@
+{
+  "name": "proxy-project",
+  "version": "1.0.0",
+  "main": "api/proxy.js",
+  "dependencies": {
+    "http-proxy-middleware": "^2.0.0"
+  }
+}
