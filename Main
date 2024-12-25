@@ -1,122 +1,51 @@
+// Import necessary module
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
-// HTML GUI Content
-const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Froggy Proxy</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #e0f7fa;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        .container {
-            text-align: center;
-            background: #ffffff;
-            border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            max-width: 400px;
-            width: 100%;
-        }
-        h1 {
-            color: #00695c;
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        input {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #b2dfdb;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        button {
-            background-color: #00796b;
-            color: #ffffff;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background-color: #004d40;
-        }
-        .result {
-            margin-top: 20px;
-            text-align: left;
-            word-wrap: break-word;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Froggy Proxy 🐸</h1>
-        <input type="text" id="urlInput" placeholder="Enter URL to proxy">
-        <button id="proxyButton">Proxy It!</button>
-        <div id="result" class="result"></div>
-    </div>
-    <script>
-        document.getElementById('proxyButton').addEventListener('click', () => {
-            const url = document.getElementById('urlInput').value;
-            if (!url) {
-                alert('Please enter a URL!');
-                return;
-            }
-            fetch(\`/api/froggy?url=\${encodeURIComponent(url)}\`)
-                .then(response => response.text())
-                .then(data => {
-                    document.getElementById('result').innerHTML = \`<pre>\${data}</pre>\`;
-                })
-                .catch(error => {
-                    document.getElementById('result').innerHTML = \`<p style="color:red;">Error: \${error.message}</p>\`;
-                });
-        });
-    </script>
-</body>
-</html>
-`;
+// Utility function for logging
+const log = (message) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] ${message}`);
+};
 
-// Serverless function handler
-module.exports = async (req, res) => {
-    const urlPath = req.url;
+// Main handler function for the Froggy Proxy
+module.exports = (req, res) => {
+    const queryParams = new URLSearchParams(req.url.split('?')[1]);
+    const targetUrl = queryParams.get('url');
+    const corsEnabled = queryParams.get('cors') === 'true';
+    const addHeaders = queryParams.get('headers') === 'true';
 
-    if (urlPath === '/' || urlPath === '/index.html') {
-        // Serve the GUI
-        res.setHeader('Content-Type', 'text/html');
-        res.send(htmlContent);
-    } else if (urlPath.startsWith('/api/froggy')) {
-        // Handle the proxy
-        const targetUrl = new URLSearchParams(req.url.split('?')[1]).get('url');
-
-        if (!targetUrl) {
-            res.status(400).json({ error: 'Target URL is required as a query parameter (e.g., /api/froggy?url=http://example.com)' });
-            return;
-        }
-
-        const proxy = createProxyMiddleware({
-            target: targetUrl,
-            changeOrigin: true,
-            pathRewrite: { '^/api/froggy': '' },
-            onError(err, req, res) {
-                res.status(500).json({ error: 'Proxy encountered an error.', details: err.message });
-            }
-        });
-
-        return proxy(req, res, () => {});
-    } else {
-        // Handle unknown routes
-        res.status(404).json({ error: 'Not Found' });
+    // Validate the target URL
+    if (!targetUrl) {
+        log('Error: Missing target URL');
+        res.status(400).json({ error: 'Target URL is required.' });
+        return;
     }
+
+    // Configure proxy options
+    const proxyOptions = {
+        target: targetUrl,
+        changeOrigin: true,
+        selfHandleResponse: true,
+        onProxyReq: (proxyReq) => {
+            log(`Proxying request to: ${targetUrl}`);
+            if (addHeaders) {
+                proxyReq.setHeader('X-Proxy-By', 'Froggy Proxy');
+            }
+        },
+        onProxyRes: (proxyRes, req, res) => {
+            log(`Received response: ${proxyRes.statusCode} from ${targetUrl}`);
+            if (corsEnabled) {
+                res.setHeader('Access-Control-Allow-Origin', '*');
+            }
+            proxyRes.pipe(res); // Stream response back to client
+        },
+        onError: (err) => {
+            log(`Proxy error: ${err.message}`);
+            res.status(500).json({ error: 'An error occurred during proxying.' });
+        },
+    };
+
+    // Create and execute the proxy middleware
+    const proxy = createProxyMiddleware(proxyOptions);
+    proxy(req, res, () => {});
 };
