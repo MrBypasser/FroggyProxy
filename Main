@@ -74,7 +74,7 @@ const htmlContent = `
                 alert('Please enter a URL!');
                 return;
             }
-            fetch(\`/api/proxy?url=\${encodeURIComponent(url)}\`)
+            fetch(\`/api/froggy?url=\${encodeURIComponent(url)}\`)
                 .then(response => response.text())
                 .then(data => {
                     document.getElementById('result').innerHTML = \`<pre>\${data}</pre>\`;
@@ -88,28 +88,35 @@ const htmlContent = `
 </html>
 `;
 
-// Export function for Vercel
+// Serverless function handler
 module.exports = async (req, res) => {
-    if (req.url.startsWith('/api/proxy')) {
+    const urlPath = req.url;
+
+    if (urlPath === '/' || urlPath === '/index.html') {
+        // Serve the GUI
+        res.setHeader('Content-Type', 'text/html');
+        res.send(htmlContent);
+    } else if (urlPath.startsWith('/api/froggy')) {
+        // Handle the proxy
         const targetUrl = new URLSearchParams(req.url.split('?')[1]).get('url');
 
         if (!targetUrl) {
-            res.status(400).json({ error: 'Target URL is required as a query parameter (e.g., /api/proxy?url=http://example.com)' });
+            res.status(400).json({ error: 'Target URL is required as a query parameter (e.g., /api/froggy?url=http://example.com)' });
             return;
         }
 
         const proxy = createProxyMiddleware({
             target: targetUrl,
             changeOrigin: true,
-            pathRewrite: { '^/api/proxy': '' },
+            pathRewrite: { '^/api/froggy': '' },
             onError(err, req, res) {
                 res.status(500).json({ error: 'Proxy encountered an error.', details: err.message });
             }
         });
 
-        proxy(req, res, () => {});
+        return proxy(req, res, () => {});
     } else {
-        res.setHeader('Content-Type', 'text/html');
-        res.send(htmlContent);
+        // Handle unknown routes
+        res.status(404).json({ error: 'Not Found' });
     }
 };
